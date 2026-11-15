@@ -1,0 +1,37 @@
+[package]
+name = "rusidian"
+version = "0.2.0"
+description = "Lightweight, Obsidian-vault-compatible notes app"
+authors = ["you"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "rusidian_lib"
+# "cdylib" is only needed for Android/iOS builds. It is left out because on the
+# windows-gnu toolchain the DLL exceeds the 65535 export limit
+# ("export ordinal too large"). Add it back when targeting mobile.
+crate-type = ["staticlib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusidian-core = { path = "../core" }
+dunce = "1.0.5"
+trash = "5.3.0"
+tauri-plugin-notification = "2"
+ureq = "3"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+# Release profile lives in the workspace root Cargo.toml.

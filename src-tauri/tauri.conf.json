@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rusidian",
+  "version": "0.2.0",
+  "identifier": "com.rusidian.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Rusidian",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 600,
+        "minHeight": 400,
+        "decorations": false,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "createUpdaterArtifacts": true,
+    "publisher": "Rusidian",
+    "copyright": "© 2026 Rusidian",
+    "category": "Productivity",
+    "shortDescription": "Obsidian vault와 호환되는 가벼운 노트·일정·할일·재무 앱",
+    "longDescription": "Rusidian은 기존 Obsidian vault를 그대로 열어 노트, 할일, 일정, 재무 기록을 한곳에서 다루는 가벼운 데스크톱 앱입니다.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Korean", "English"],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": "ko-KR"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhDQTVEMDVGOEFCODg4NjcKUldSbmlMaUtYOUNsakZ0WFgrYUZqUXdYZ3JMSXlCN2JMSHh4cTdzM2lpYUdic1I4a2lTZ2p5dHkK",
+      "endpoints": ["https://github.com/LiU-SKY/rusidian/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

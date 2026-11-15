@@ -1,0 +1,59 @@
+# Builds the Windows installers for a version tag (v0.3.0, ...) and publishes
+# them as a GitHub release with `latest.json`, which installed apps read to
+# update themselves (see `plugins.updater` in src-tauri/tauri.conf.json).
+#
+# Needs the repository secret TAURI_SIGNING_PRIVATE_KEY (the updater's private
+# key; its public half is the `pubkey` in tauri.conf.json).
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app reports the version in tauri.conf.json; a tag that says
+      # otherwise would publish an update the app never sees as newer.
+      - name: Tag matches the app version
+        shell: pwsh
+        run: |
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$v" -ne "${{ github.ref_name }}") {
+            throw "Tag ${{ github.ref_name }} but tauri.conf.json says $v"
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Rusidian ${{ github.ref_name }}
+          releaseBody: 설치 파일은 아래 Assets에 있습니다. 이미 설치한 앱은 다음에 켤 때 업데이트를 알려 줍니다.
+          releaseDraft: false
+          prerelease: false
+          # The NSIS installer installs per user, so updating needs no admin.
+          updaterJsonPreferNsis: true
