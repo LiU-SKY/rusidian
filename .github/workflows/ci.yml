@@ -37,6 +37,9 @@ jobs:
       - name: npm run check
         run: npm run check
 
+      - name: npm test
+        run: npm test
+
       # Also produces ../build, which tauri::generate_context! needs to compile
       # src-tauri, so it runs before clippy.
       - name: npm run build

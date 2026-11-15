@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import { sveltekit } from "@sveltejs/kit/vite";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
@@ -7,6 +7,13 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [sveltekit()],
+
+  // `npm test`: unit tests next to the code (`src/**/*.test.ts`). The SvelteKit
+  // plugin compiles `.svelte.ts` modules, so runes like `$state` work in them.
+  test: {
+    include: ["src/**/*.test.ts"],
+    environment: "node",
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
