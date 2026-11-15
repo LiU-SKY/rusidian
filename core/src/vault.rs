@@ -249,6 +249,8 @@ pub fn create_text(root: &Path, rel: &str, content: &str) -> Result<(), String> 
 mod tests {
     use super::*;
 
+    // Only Windows lets a file's creation time be set (`keep_created`).
+    #[cfg(windows)]
     #[test]
     fn saving_keeps_the_creation_time() {
         let dir = tempfile::tempdir().unwrap();
