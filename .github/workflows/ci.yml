@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: Windows (core tests, clippy, frontend)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm run check
+        run: npm run check
+
+      # Also produces ../build, which tauri::generate_context! needs to compile
+      # src-tauri, so it runs before clippy.
+      - name: npm run build
+        run: npm run build
+
+      # Only the core crate: the src-tauri test binary has no GUI manifest and
+      # fails with STATUS_ENTRYPOINT_NOT_FOUND on Windows (see README, 테스트).
+      - name: cargo test -p rusidian-core
+        run: cargo test -p rusidian-core
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets
+
+  linux-core:
+    name: Linux (core tests)
+    # Surfaces path assumptions (separators, case, drive letters) in the core.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo test -p rusidian-core
+        run: cargo test -p rusidian-core
