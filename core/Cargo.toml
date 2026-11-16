@@ -1,6 +1,6 @@
 [package]
 name = "rusidian-core"
-version = "0.2.0"
+version = "0.3.0"
 description = "UI-independent core of Rusidian: vault access, indexing, tasks, finance"
 edition = "2024"
 

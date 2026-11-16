@@ -3673,7 +3673,7 @@ dependencies = [
 
 [[package]]
 name = "rusidian"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dunce",
  "rusidian-core",
@@ -3692,7 +3692,7 @@ dependencies = [
 
 [[package]]
 name = "rusidian-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "calamine",
  "encoding_rs 0.8.44",

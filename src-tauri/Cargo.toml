@@ -1,6 +1,6 @@
 [package]
 name = "rusidian"
-version = "0.2.0"
+version = "0.3.0"
 description = "Lightweight, Obsidian-vault-compatible notes app"
 authors = ["you"]
 edition = "2024"
