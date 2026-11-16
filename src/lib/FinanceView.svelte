@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { onMount, tick } from "svelte";
   import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
   import {
-    addFinance, exportFinanceCsv, financeRange, getBudgets, getSavings, importCsvPreview, type Budgets, type EntryKind,
-    type FinanceData, type FinanceItem, type ImportPreview, type ImportResult,
+    addFinance, balances as loadBalances, exportFinanceCsv, financeRange, getBudgets, getSavings, importCsvPreview,
+    type BalanceItem, type Budgets, type EntryKind, type FinanceData, type FinanceItem, type ImportPreview, type ImportResult,
   } from "./api";
+  import { remainingAt, spendableSnapshot } from "./remaining";
   import ImportDialog from "./ImportDialog.svelte";
   import PhoneDialog from "./PhoneDialog.svelte";
   import BudgetDialog from "./BudgetDialog.svelte";
@@ -61,6 +63,9 @@
   }
   /** The record whose detail is open. */
   let detailKey = $state<string | null>(null);
+  /** Money left by the account balances (null: no balance recorded yet). */
+  interface Remaining { amount: number; date: string; back: boolean; moved: boolean }
+  let remaining = $state<Remaining | null>(null);
 
   // quick-add form
   let kind = $state<EntryKind>("expense");
@@ -89,17 +94,32 @@
   async function load() {
     const s = ++seq;
     try {
-      const [result, b, sv] = await Promise.all([
+      const [result, b, sv, bal] = await Promise.all([
         financeRange(`${trendMonths[0]}-01`, lastDay(month)), getBudgets(), getSavings().catch(() => savings),
+        loadBalances().catch(() => [] as BalanceItem[]),
       ]);
+      const left = await remainingFor(month, bal, sv);
       if (s === seq) {
         data = result;
         budgets = b;
         savings = sv;
+        remaining = left;
       }
     } catch (e) {
       if (s === seq) message = { kind: "error", text: String(e) };
     }
+  }
+
+  /** Money left at the end of `m` (today, for this month), from the latest account balances. */
+  async function remainingFor(m: string, bal: BalanceItem[], sv: string[]): Promise<Remaining | null> {
+    const saving = (g: string | null) => !!g && sv.some((x) => g === x || g.startsWith(`${x}/`));
+    const snap = spendableSnapshot(bal, saving);
+    if (!snap) return null;
+    const today = localDate();
+    const end = m === today.slice(0, 7) ? today : lastDay(m);
+    const [from, to] = end >= snap.date ? [snap.date, end] : [end, snap.date];
+    const between = from === to ? [] : (await financeRange(addDays(from, 1), to)).entries;
+    return { amount: remainingAt(snap, end, between), date: snap.date, back: end < snap.date, moved: between.length > 0 };
   }
 
   $effect(() => {
@@ -290,6 +310,10 @@
     const p = (part / whole) * 100;
     return p > 0 && p < 1 ? "<1%" : `${Math.round(p)}%`;
   };
+  const shortDate = (d: string) => {
+    const x = parseYmd(d);
+    return `${x.getMonth() + 1}/${x.getDate()}`;
+  };
   const dayLabel = (d: string) => {
     if (!d) return "날짜 없음";
     const x = parseYmd(d);
@@ -346,13 +370,33 @@
     }
   }
 
+  const TABS = ["book", "fixed", "assets"] as const;
+  /** Tab (Shift+Tab backwards) cycles 가계부 → 고정지출 → 자산, except while typing in a field or in a dialog. */
+  function cycleTabs(e: KeyboardEvent) {
+    if (e.key !== "Tab" || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.closest("input, textarea, select, [contenteditable], [role=dialog], dialog")) return;
+    e.preventDefault();
+    tab = TABS[(TABS.indexOf(tab) + (e.shiftKey ? TABS.length - 1 : 1)) % TABS.length];
+    // The focused element may have gone with the old tab; keep keys coming here.
+    tick().then(() => { if (!root?.contains(document.activeElement)) root?.focus({ preventScroll: true }); });
+  }
+
+  let root = $state<HTMLElement | null>(null);
+  onMount(() => {
+    // Opening the view with nothing focused: let Tab switch the tabs right away.
+    if (!document.activeElement || document.activeElement === document.body) root?.focus({ preventScroll: true });
+  });
+
   function goToday() {
     month = localDate().slice(0, 7);
     selectedCategory = null;
   }
 </script>
 
-<section class="finance view-in" aria-label="재무">
+<!-- Focusable so a click on its background keeps keys here (Tab switches the tabs). -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+<section class="finance view-in" aria-label="재무" tabindex="-1" bind:this={root} onkeydown={cycleTabs}>
   <header class="head">
     <h1>{monthLabel(month)}</h1>
     <div class="seg tabs" role="tablist" aria-label="재무 메뉴" use:slider={{ selector: ".on" }}>
@@ -423,8 +467,16 @@
       </div>
       <div class="tile">
         <span class="label">남은 돈</span>
-        <span class="value">{income - expense - saved < 0 ? "−" : ""}{won(Math.abs(income - expense - saved))}</span>
-        <span class="sub">수입 − 지출 − 저축</span>
+        {#if remaining}
+          <span class="value">{remaining.amount < 0 ? "−" : ""}{won(Math.abs(remaining.amount))}</span>
+          <span class="sub" title="자산 탭에 기록한 계좌 잔액(저축·투자 말고)에서 그 뒤의 기록을 더하고 뺀 돈입니다.">
+            {shortDate(remaining.date)} 통장 잔액{remaining.back ? "에서 거꾸로 계산" : remaining.moved ? " + 그 뒤 기록" : " 기준"}
+          </span>
+          <span class="sub">이번 달 수입 − 지출 − 저축 {income - expense - saved < 0 ? "−" : "+"}{won(Math.abs(income - expense - saved))}</span>
+        {:else}
+          <span class="value">{income - expense - saved < 0 ? "−" : ""}{won(Math.abs(income - expense - saved))}</span>
+          <span class="sub" title="자산 탭에 계좌 잔액을 기록하면 통장에 실제로 남은 돈을 보여줍니다.">수입 − 지출 − 저축</span>
+        {/if}
       </div>
     </div>
 
@@ -736,6 +788,9 @@
   .pw-actions .primary:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+  .finance:focus {
+    outline: none;
   }
   .finance {
     flex: 1;
