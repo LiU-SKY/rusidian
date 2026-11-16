@@ -21,7 +21,7 @@ jobs:
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The app reports the version in tauri.conf.json; a tag that says
       # otherwise would publish an update the app never sees as newer.
@@ -33,7 +33,7 @@ jobs:
             throw "Tag ${{ github.ref_name }} but tauri.conf.json says $v"
           }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
