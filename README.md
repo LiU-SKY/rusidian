@@ -206,3 +206,7 @@ Obsidian 등 바깥에서 파일을 바꾸면 자동으로 트리·검색·백�
 
 직접 빌드하거나 코드를 고치려면 [개발 문서](docs/DEVELOPMENT.md)를 보세요.
 Tauri 2(Rust)와 SvelteKit(Svelte 5)으로 만들었습니다.
+
+## 라이선스
+
+[MIT](LICENSE)

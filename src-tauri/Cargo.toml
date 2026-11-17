@@ -2,7 +2,8 @@
 name = "rusidian"
 version = "0.3.0"
 description = "Lightweight, Obsidian-vault-compatible notes app"
-authors = ["you"]
+license = "MIT"
+authors = ["LiU-SKY"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

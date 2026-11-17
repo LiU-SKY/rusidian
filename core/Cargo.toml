@@ -2,6 +2,7 @@
 name = "rusidian-core"
 version = "0.3.0"
 description = "UI-independent core of Rusidian: vault access, indexing, tasks, finance"
+license = "MIT"
 edition = "2024"
 
 [dependencies]
