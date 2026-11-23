@@ -5,6 +5,7 @@ pub mod calendar;
 pub mod calendars;
 pub mod daily;
 pub mod date;
+pub mod everything;
 pub mod fileops;
 pub mod assets;
 pub mod attachments;

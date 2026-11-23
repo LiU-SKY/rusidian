@@ -19,7 +19,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import Icon from "./Icon.svelte";
 
   interface Props {
@@ -34,9 +34,15 @@
     empty?: string;
     /** Items with `removable` get a × button that calls this (e.g. drop from a list). */
     onremove?: (item: PaletteItem) => void;
+    /**
+     * Called with the query as it changes (and once on opening), for lists
+     * filled asynchronously: fetch, put the results in state that `items`
+     * reads, and the list follows.
+     */
+    onquery?: (query: string) => void;
   }
 
-  let { placeholder, items, onpick, onclose, footer, empty = "결과 없음", onremove }: Props = $props();
+  let { placeholder, items, onpick, onclose, footer, empty = "결과 없음", onremove, onquery }: Props = $props();
 
   let query = $state("");
   let active = $state(0);
@@ -56,6 +62,16 @@
   $effect(() => {
     active;
     listEl?.querySelector(".active")?.scrollIntoView({ block: "nearest" });
+  });
+
+  $effect(() => {
+    const q = query;
+    untrack(() => onquery?.(q));
+  });
+
+  // Async results can arrive shorter than the list the cursor was on.
+  $effect(() => {
+    if (active >= list.length) untrack(() => (active = Math.max(0, list.length - 1)));
   });
 
   function pick(i: number, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
