@@ -195,6 +195,25 @@ pub fn vault_relative(root: &Path, full: &str) -> Option<String> {
     Some(rest.trim_end_matches('\\').replace('\\', "/")).filter(|r| !r.is_empty())
 }
 
+/// Extensions Windows runs as programs or scripts when "opened" (or that
+/// change the system: `.reg`, `.inf`). Hits like these are shown in Explorer
+/// instead: the page can search for any path, so opening one must never run it.
+const RUNS_CODE: &[&str] = &[
+    "appref-ms", "application", "bat", "cmd", "com", "cpl", "dll", "exe", "gadget", "hta", "inf", "ins", "isp",
+    "jar", "js", "jse", "lnk", "msc", "msh", "msh1", "msh2", "mshxml", "msh1xml", "msh2xml", "msi", "msix",
+    "msixbundle", "appx", "appxbundle", "msp", "mst", "pif", "ps1", "ps1xml", "ps2", "ps2xml", "psc1", "psc2",
+    "psd1", "psm1", "reg", "scf", "scr", "sct", "settingcontent-ms", "shb", "shs", "sys", "url", "vb", "vbe",
+    "vbs", "website", "ws", "wsc", "wsf", "wsh", "xbap", "library-ms", "search-ms", "searchconnector-ms",
+];
+
+/// Would opening `path` with its default app run code? (Folders don't.)
+pub fn runs_code(path: &str) -> bool {
+    let name = path.rsplit(['\\', '/']).next().unwrap_or(path);
+    // Windows ignores trailing dots and spaces: `a.exe.` opens `a.exe`.
+    let name = name.trim_end_matches(['.', ' ']);
+    name.rsplit_once('.').is_some_and(|(_, ext)| RUNS_CODE.iter().any(|e| e.eq_ignore_ascii_case(ext)))
+}
+
 // ---------------------------------------------------------------- Windows
 
 #[cfg(windows)]
@@ -484,6 +503,17 @@ mod tests {
         assert_eq!(vault_relative(&root, r"C:\Users\Me\Vault"), None);
         assert_eq!(vault_relative(&root, r"C:\Users\Me\Vault2\a.md"), None);
         assert_eq!(vault_relative(&root, r"D:\a.md"), None);
+    }
+
+    #[test]
+    fn programs_and_scripts_are_not_opened() {
+        for p in [r"C:\Windows\System32\cmd.exe", r"D:\a\run.BAT", r"C:\x\setup.msi", r"C:\x\link.lnk",
+            r"C:\x\a.ps1", r"C:\x\evil.exe. ", r"C:\x\tweak.reg", "C:/x/a.vbs"] {
+            assert!(runs_code(p), "{p}");
+        }
+        for p in [r"C:\x\보고서.pdf", r"C:\x\notes.md", r"C:\x\photo.JPG", r"C:\x\folder", r"C:\x.exe\readme.txt", "E:"] {
+            assert!(!runs_code(p), "{p}");
+        }
     }
 
     #[test]

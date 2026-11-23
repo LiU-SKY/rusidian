@@ -70,7 +70,7 @@ WebView2가 없는 PC(오래된 Windows 10)에서는 설치 프로그램이 WebV
 | 분할 | 탭 줄 오른쪽 분할 버튼 또는 **Ctrl+\\** — 두 창 나란히. 같은 노트를 양쪽에 열면 입력이 바로 맞춰짐 |
 | 템플릿 | **Alt+T** 또는 명령 팔레트 "템플릿 삽입" — `.obsidian/templates.json`의 폴더에서 골라 커서 위치에 넣음. `{{title}}` `{{date}}` `{{time}}` `{{date:YYYY년 M월 D일 dddd}}`, 템플릿의 속성은 노트 속성에 합침 |
 | 빠른 전환 | **Ctrl+O** — 파일 이름 퍼지 검색, 빈 입력이면 최근 연 파일 순. Enter 열기, **Shift+Enter** 그 이름으로 새 노트 |
-| PC 전체 파일 찾기 | **Ctrl+Shift+E** (명령 팔레트 "Everything: PC 전체에서 파일 찾기") — 실행 중인 [Everything](https://www.voidtools.com)(1.4 이상, 1.5 알파 포함)으로 PC의 모든 파일·폴더를 이름으로 찾음. Everything 문법 그대로(`ext:pdf`, `"두 단어"`, `C:\work\ 보고서`). vault 안의 노트·캔버스·이미지·PDF는 앱에서 열고(**Ctrl+Enter** 새 탭), 그 밖의 파일은 기본 앱으로, **Shift+Enter**는 탐색기에서 보기. 따로 설치할 DLL·es.exe 없음 |
+| PC 전체 파일 찾기 | **Ctrl+Shift+E** (명령 팔레트 "Everything: PC 전체에서 파일 찾기") — 실행 중인 [Everything](https://www.voidtools.com)(1.4 이상, 1.5 알파 포함)으로 PC의 모든 파일·폴더를 이름으로 찾음. Everything 문법 그대로(`ext:pdf`, `"두 단어"`, `C:\work\ 보고서`). vault 안의 노트·캔버스·이미지·PDF는 앱에서 열고(**Ctrl+Enter** 새 탭), 그 밖의 파일은 기본 앱으로(프로그램·스크립트는 실행하지 않고 탐색기에서 보여 줌), **Shift+Enter**는 탐색기에서 보기. 따로 설치할 DLL·es.exe 없음 |
 | 명령 팔레트 | **Ctrl+P** — 모든 기능을 이름으로 찾아 실행 (보기 전환, 현재 파일 이름 바꾸기/삭제, 테마 전환 등) |
 | 검색 | **Ctrl+Shift+F** — 부분 문자열, 여러 단어는 AND, `"구문"` 지원, Enter로 첫 결과 열기 |
 | 검색 연산자 | `tag:#일` (하위 태그 포함), `path:폴더`, `file:이름`, `-단어` (제외). 섞어 쓸 수 있음 |

@@ -76,8 +76,11 @@ export const everythingStatus = () => invoke<EverythingStatus>("everything_statu
 /** Search the whole PC with Everything's own syntax (`ext:pdf`, `"two words"`, …). */
 export const everythingSearch = (query: string, limit?: number) =>
   invoke<EverythingFound>("everything_search", { query, limit });
-/** Open a hit of the last search with its default app, or show it in Explorer. */
-export const everythingOpen = (path: string, reveal = false) => invoke<void>("everything_open", { path, reveal });
+/**
+ * Open a hit of a recent search with its default app, or show it in Explorer.
+ * Programs and scripts are always just shown; resolves to false when shown.
+ */
+export const everythingOpen = (path: string, reveal = false) => invoke<boolean>("everything_open", { path, reveal });
 
 export interface TagCount {
   /** Without `#`; nested tags use `/`. */
