@@ -1016,8 +1016,8 @@
         treeUi.expanded[hit.vault_path] = true;
       } else if (hit.vault_path !== null && (isTextFile(hit.vault_path) || mediaKind(hit.vault_path))) {
         await openPath(hit.vault_path, keys.mod);
-      } else {
-        await everythingOpen(hit.path);
+      } else if (!(await everythingOpen(hit.path))) {
+        notice = `"${hit.name}"은(는) 프로그램이나 스크립트라 실행하지 않고 탐색기에서 보여 줍니다.`;
       }
     } catch (e) {
       error = String(e);

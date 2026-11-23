@@ -48,9 +48,9 @@ struct AppState {
     ics: Arc<IcsCache>,
     /// Vaults being synced right now (one sync at a time per vault).
     syncing: Mutex<std::collections::HashSet<PathBuf>>,
-    /// Paths of each window's last Everything search: `everything_open` opens
-    /// only these, so a page can't run an arbitrary program through it.
-    everything_hits: Mutex<HashMap<String, std::collections::HashSet<String>>>,
+    /// Paths of each window's last few Everything searches: `everything_open`
+    /// opens only these (and never runs a program, see `everything::runs_code`).
+    everything_hits: Mutex<HashMap<String, std::collections::VecDeque<std::collections::HashSet<String>>>>,
 }
 
 #[derive(serde::Serialize)]
@@ -728,6 +728,9 @@ async fn search_vault(state: State<'_, AppState>,
 
 /// Results asked of Everything at most (it counts all matches anyway).
 const EVERYTHING_MAX: u32 = 200;
+/// Searches whose hits stay openable. More than one: answers can come back out
+/// of order while typing, and the list shown may not be the last one asked.
+const EVERYTHING_KEEP: usize = 4;
 
 #[derive(serde::Serialize)]
 struct EverythingHit {
@@ -766,25 +769,33 @@ async fn everything_search(state: State<'_, AppState>, window: tauri::WebviewWin
         EverythingHit { hit, vault_path }
     }).collect();
     let paths = hits.iter().map(|h| h.hit.path.clone()).collect();
-    state.everything_hits.lock().map_err(|_| "state poisoned".to_string())?
-        .insert(window.label().to_string(), paths);
+    let mut kept = state.everything_hits.lock().map_err(|_| "state poisoned".to_string())?;
+    let recent = kept.entry(window.label().to_string()).or_default();
+    recent.push_back(paths);
+    while recent.len() > EVERYTHING_KEEP {
+        recent.pop_front();
+    }
     Ok(EverythingFound { total: found.total, hits })
 }
 
-/// Open a hit of the last Everything search with its default app, or show it
-/// in Explorer (`reveal`).
+/// Open a hit of a recent Everything search with its default app, or show it
+/// in Explorer (`reveal`). Programs and scripts are only ever shown, never run:
+/// the page can search for any path, so this must not be a way to start one.
+/// Returns whether it was opened (false: shown in Explorer).
 #[tauri::command]
 fn everything_open(state: State<AppState>, window: tauri::WebviewWindow,
-    path: String, reveal: bool) -> Result<(), String> {
+    path: String, reveal: bool) -> Result<bool, String> {
     let known = state.everything_hits.lock().map_err(|_| "state poisoned".to_string())?
-        .get(window.label()).is_some_and(|paths| paths.contains(&path));
+        .get(window.label()).is_some_and(|recent| recent.iter().any(|paths| paths.contains(&path)));
     if !known {
         return Err("Everything 검색 결과에 있는 파일만 열 수 있습니다.".to_string());
     }
-    if reveal {
-        tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())
+    if reveal || everything::runs_code(&path) {
+        tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())?;
+        Ok(false)
     } else {
-        tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| format!("열지 못했습니다 ({path}): {e}"))
+        tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| format!("열지 못했습니다 ({path}): {e}"))?;
+        Ok(true)
     }
 }
 
