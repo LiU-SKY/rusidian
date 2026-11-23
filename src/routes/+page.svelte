@@ -20,6 +20,7 @@
   import PrintView from "$lib/PrintView.svelte";
   import TagPane from "$lib/TagPane.svelte";
   import WindowControls from "$lib/WindowControls.svelte";
+  import { MOBILE, onDesktop } from "$lib/platform";
   import { DocStore, type Doc } from "$lib/docs.svelte";
   import { fuzzyMatch } from "$lib/fuzzy";
   import type { IconName } from "$lib/icons";
@@ -30,7 +31,7 @@
   import { hk, hotkeys, label as hotkeyLabel, matches } from "$lib/hotkeys.svelte";
   import { Leaf, MAX_PANES, Pane, Workspace, type ViewKind } from "$lib/workspace.svelte";
   import {
-    createNote, displayName, filePaths, focusVaultWindow, forgetVault, isTextFile, listTemplates, movePath,
+    createNote, deviceVault, displayName, filePaths, focusVaultWindow, forgetVault, isTextFile, listTemplates, movePath,
     newCanvas, newFolder, newNote, onVaultChanged, openDailyNote, openVault, openWindow, readNote, recentVaults, refreshTree,
     renamePath, renderTemplate, resolveLink, revealPath, startupVault, trashPath, vaultUrl, getSync, setSync,
     getBookmarks, toggleBookmark, removeBookmark, type BookmarkItem,
@@ -444,6 +445,12 @@
 
   /** Pick a folder and open it as a vault (in a new window when `newWindow`). */
   async function pickVault(newWindow = false) {
+    if (MOBILE) {
+      // No folder picker with plain paths on phones yet: the app's own vault.
+      const own = await deviceVault().catch((e) => ((error = String(e)), null));
+      if (own) await loadVault(own);
+      return;
+    }
     const picked = await open({ directory: true, multiple: false, title: "Vault 폴더 선택" });
     if (typeof picked !== "string") return;
     if (newWindow) await openWindow(picked).catch((e) => (error = String(e)));
@@ -1051,7 +1058,7 @@
       run: () => (palette = "commands") },
     { id: "switcher", obsidian: "switcher:open", keys: [hk("Mod+O")], label: "빠른 전환: 파일 열기", icon: "search", when: hasVault,
       run: () => (palette = "switcher") },
-    { id: "everything", keys: [hk("Mod+Shift+E")], label: "Everything: PC 전체에서 파일 찾기", icon: "search",
+    { id: "everything", keys: [hk("Mod+Shift+E")], label: "Everything: PC 전체에서 파일 찾기", icon: "search", when: onDesktop(),
       run: () => (palette = "everything") },
     { id: "new-note", obsidian: "file-explorer:new-file", keys: [hk("Mod+N")], label: "새 노트", icon: "file-plus", when: hasVault, run: () => newNoteIn("") },
     { id: "new-canvas", obsidian: "canvas:new-file", label: "새 캔버스", icon: "columns", when: hasVault, run: () => newCanvasIn("") },
@@ -1096,7 +1103,7 @@
       run: () => currentPath && trashItem(currentPath, false) },
     { id: "recovery", obsidian: "file-recovery:open", label: "파일 복구: 이전 버전 보기", icon: "clock", when: hasVault,
       run: () => (recovery = { start: isNote ? currentPath : null }) },
-    { id: "reveal", obsidian: "open-with-default-app:show", label: "현재 파일을 탐색기에서 보기", icon: "folder-open", when: hasFile,
+    { id: "reveal", obsidian: "open-with-default-app:show", label: "현재 파일을 탐색기에서 보기", icon: "folder-open", when: onDesktop(hasFile),
       run: () => currentPath && treeActions.reveal(currentPath) },
     { id: "right", obsidian: "app:toggle-right-sidebar", label: "오른쪽 패널 열기/닫기", icon: "panel-right", when: hasVault,
       run: () => (showRight = !showRight) },
@@ -1116,10 +1123,10 @@
     { id: "bookmarks", obsidian: "bookmarks:open", label: "북마크 보기", icon: "bookmark", when: hasVault, run: () => (sideTab = "bookmarks") },
     { id: "outgoing", obsidian: "outgoing-links:open", label: "나가는 링크 보기", icon: "arrow-up-right", when: hasVault, run: () => { showRight = true; rightTab = "outgoing"; } },
     { id: "vault", label: "다른 폴더를 vault로 열기", icon: "folder-plus", run: () => pickVault() },
-    { id: "new-window", obsidian: "workspace:new-window", keys: [hk("Mod+Shift+N")], label: "새 창", icon: "columns",
+    { id: "new-window", obsidian: "workspace:new-window", keys: [hk("Mod+Shift+N")], label: "새 창", icon: "columns", when: onDesktop(),
       run: () => openWindow(null).catch((e) => (error = String(e))) },
-    { id: "vault-window", label: "다른 폴더를 새 창에서 vault로 열기", icon: "folder-plus", run: () => pickVault(true) },
-    { id: "reveal-vault", label: "vault 폴더를 탐색기에서 보기", icon: "folder-open", when: hasVault,
+    { id: "vault-window", label: "다른 폴더를 새 창에서 vault로 열기", icon: "folder-plus", when: onDesktop(), run: () => pickVault(true) },
+    { id: "reveal-vault", label: "vault 폴더를 탐색기에서 보기", icon: "folder-open", when: onDesktop(hasVault),
       run: () => treeActions.reveal("") },
   ];
 
@@ -1232,7 +1239,8 @@
     // Look for a new version once, from the main window only (not in `npm run
     // tauri dev`, where it would install a release over the dev build).
     const updateTimer = setTimeout(async () => {
-      if (import.meta.env.DEV) return;
+      // Phones update through their app store / APK, not this updater.
+      if (import.meta.env.DEV || MOBILE) return;
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       if (destroyed || getCurrentWindow().label !== "main") return;
       const u = await updates.check();
@@ -1298,7 +1306,7 @@
 <!-- No native title bar: the top row of each pane is the drag area and the
      window buttons sit at the right end of the rightmost top row. -->
 <div class="app" class:with-right={rightPanel}>
-  <WindowControls />
+  {#if !MOBILE}<WindowControls />{/if}
   <aside class="sidebar">
     <header class="sidebar-head top-row" data-drag>
       <button class="vault-name" onclick={() => (palette = "vaults")}

@@ -1,0 +1,8 @@
+# MinGW linkers export every symbol of a DLL that declares no exports of
+# its own, and the app's `cdylib` (needed for Android) then exceeds the
+# 65535-export limit of a Windows DLL. Only the listed exports are needed.
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-Wl,--exclude-all-symbols"]
+
+[target.x86_64-pc-windows-gnullvm]
+rustflags = ["-C", "link-arg=-Wl,--exclude-all-symbols"]
