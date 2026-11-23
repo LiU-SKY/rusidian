@@ -634,6 +634,8 @@ export const startupVault = () => invoke<string | null>("startup_vault");
 export const focusVaultWindow = (path: string) => invoke<boolean>("focus_vault_window", { path });
 /** Open a new window, empty or with a vault. */
 export const openWindow = (path: string | null) => invoke<void>("open_window", { path });
+/** Phones: the vault folder in the app's own storage (made on first use). */
+export const deviceVault = () => invoke<string>("device_vault");
 /** Remove from the recent list (the folder is not touched). */
 export const forgetVault = (path: string) => invoke<VaultEntry[]>("forget_vault", { path });
 export const readNote = (path: string) => invoke<string>("read_note", { path });

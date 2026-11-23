@@ -189,9 +189,25 @@ GitHub Actions의 **CI**(`.github/workflows/ci.yml`)가 push와 PR마다 위 검
 
 ## Windows 빌드 참고
 
-이 환경은 `x86_64-pc-windows-gnu`(MinGW) 툴체인을 씁니다. 그래서 `src-tauri/Cargo.toml`의
-`crate-type`에서 모바일 전용 `cdylib`를 뺐습니다(GNU 링커의 DLL export 65535개 한도 초과).
+이 환경은 `x86_64-pc-windows-gnu`(MinGW) 툴체인을 씁니다. MinGW 링커는 내보낼 기호를 정하지 않은
+DLL의 기호를 모두 내보내서, 안드로이드용 `cdylib`가 DLL export 65535개 한도를 넘습니다.
+`.cargo/config.toml`의 `--exclude-all-symbols`가 이를 막습니다(MSVC에는 해당 없음).
 링크 시 나오는 `.rsrc merge failure: multiple non-default manifests` 경고는 실행에 영향이 없습니다.
+
+## 안드로이드 빌드
+
+필요한 것: JDK 17, Android SDK(platform-tools, platforms, build-tools)와 NDK, Rust 타깃.
+
+```bash
+rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+# JAVA_HOME, ANDROID_HOME, NDK_HOME 설정 후
+npm run tauri android dev               # 에뮬레이터·USB로 연결한 폰에서 실행
+npm run tauri android build -- --debug --apk
+```
+
+`src-tauri/gen/android`는 `tauri android init`으로 만든 안드로이드 프로젝트입니다.
+지금 폰 앱은 앱 저장공간의 `Vault` 폴더를 vault로 씁니다("Vault 폴더 열기"가 이 폴더를 만들고 엽니다).
+휴지통은 vault의 `.trash` 폴더이고, 새 창·탐색기에서 보기·Everything·자동 업데이트는 데스크톱에만 있습니다.
 
 ## 로드맵
 

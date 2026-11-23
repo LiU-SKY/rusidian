@@ -7,7 +7,7 @@ use rusidian_core::graph::{self, Graph};
 use rusidian_core::sync::{self, SyncConfig};
 use rusidian_core::{daily, everything, fileops, finance_import, frontmatter, gitsync, note_settings, tasks, templates, vault};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -207,6 +207,7 @@ fn focus_existing(app: &AppHandle, state: &AppState, except: &str, path: &str) -
         .ok()
         .and_then(|v| v.iter().find(|(l, open)| l.as_str() != except && open.root == root).map(|(l, _)| l.clone()));
     let Some(window) = label.and_then(|l| app.get_webview_window(&l)) else { return false };
+    #[cfg(desktop)]
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
@@ -233,9 +234,14 @@ async fn open_window(app: AppHandle, state: State<'_, AppState>, path: Option<St
     if let Some(p) = path {
         state.pending.lock().map_err(|_| "state poisoned")?.insert(label.clone(), p);
     }
+    new_window(&app, &label)
+}
+
+#[cfg(desktop)]
+fn new_window(app: &AppHandle, label: &str) -> Result<(), String> {
     // Same look as the main window in tauri.conf.json.
     // "index.html" is the app's root (the dev server in development).
-    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+    tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::App("index.html".into()))
         .title("Rusidian")
         .inner_size(1200.0, 800.0)
         .min_inner_size(600.0, 400.0)
@@ -244,6 +250,27 @@ async fn open_window(app: AppHandle, state: State<'_, AppState>, path: Option<St
         .build()
         .map_err(|e| format!("창을 열 수 없습니다: {e}"))?;
     Ok(())
+}
+
+/// A phone app has one window.
+#[cfg(mobile)]
+fn new_window(_app: &AppHandle, _label: &str) -> Result<(), String> {
+    Err("이 기기에서는 새 창을 열 수 없습니다".into())
+}
+
+/// The phone app's vault: a folder in the app's own storage, made (with a
+/// first note) on first use. Phones have no folder picker that gives a
+/// plain path, so this is where the app keeps notes for now.
+#[tauri::command]
+fn device_vault(app: AppHandle) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("Vault");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("vault 폴더를 만들 수 없습니다: {e}"))?;
+    let empty = std::fs::read_dir(&dir).map_err(|e| e.to_string())?.next().is_none();
+    if empty {
+        std::fs::write(dir.join("Rusidian.md"), "# Rusidian\n\n이 기기에 만든 vault입니다.\n")
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(dir.to_string_lossy().into_owned())
 }
 
 /// Vaults opened before, newest first (the last vault of older settings
@@ -549,9 +576,46 @@ fn trash_path(state: State<AppState>,
     let full = fileops::check_deletable(&root, &path)?;
     // Recoverable even after the trash is emptied.
     file_history::before_delete(&root, &path);
-    trash::delete(&full).map_err(|e| format!("휴지통으로 옮기지 못했습니다 ({path}): {e}"))?;
+    move_to_trash(&root, &full).map_err(|e| format!("휴지통으로 옮기지 못했습니다 ({path}): {e}"))?;
     write_index(&index).forget(&path);
     Ok(())
+}
+
+#[cfg(desktop)]
+fn move_to_trash(_root: &Path, full: &Path) -> Result<(), String> {
+    trash::delete(full).map_err(|e| e.to_string())
+}
+
+/// Phones have no system trash: use the vault's `.trash` folder, as
+/// Obsidian's "Move to Obsidian trash" option does (hidden from the tree).
+#[cfg(mobile)]
+fn move_to_trash(root: &Path, full: &Path) -> Result<(), String> {
+    let bin = root.join(".trash");
+    std::fs::create_dir_all(&bin).map_err(|e| e.to_string())?;
+    let name = full.file_name().ok_or("이름이 없는 경로입니다")?;
+    let mut target = bin.join(name);
+    let (stem, ext) = {
+        let p = Path::new(name);
+        (p.file_stem().unwrap_or(name).to_string_lossy().into_owned(),
+         p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default())
+    };
+    let mut n = 1;
+    while target.exists() {
+        target = bin.join(format!("{stem} {n}{ext}"));
+        n += 1;
+    }
+    std::fs::rename(full, &target).map_err(|e| e.to_string())
+}
+
+/// Explorer / Finder only; phones have nothing to show a file in.
+fn reveal_in_file_manager(path: impl AsRef<Path>) -> Result<(), String> {
+    #[cfg(desktop)]
+    return tauri_plugin_opener::reveal_item_in_dir(path).map_err(|e| e.to_string());
+    #[cfg(mobile)]
+    {
+        let _ = path;
+        Err("이 기기에서는 파일 관리자로 보여 줄 수 없습니다".into())
+    }
 }
 
 /// Show a file or folder ("" = the vault itself) in Explorer / Finder.
@@ -560,7 +624,7 @@ fn reveal_path(state: State<AppState>,
     window: tauri::WebviewWindow, path: String) -> Result<(), String> {
     let (root, _) = current(&state, window.label())?;
     let full = if path.is_empty() { root } else { vault::resolve(&root, &path)? };
-    tauri_plugin_opener::reveal_item_in_dir(full).map_err(|e| e.to_string())
+    reveal_in_file_manager(full)
 }
 
 /// Parse a note's YAML frontmatter. Pure function: the caller passes the
@@ -791,7 +855,7 @@ fn everything_open(state: State<AppState>, window: tauri::WebviewWindow,
         return Err("Everything 검색 결과에 있는 파일만 열 수 있습니다.".to_string());
     }
     if reveal || everything::runs_code(&path) {
-        tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())?;
+        reveal_in_file_manager(&path)?;
         Ok(false)
     } else {
         tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| format!("열지 못했습니다 ({path}): {e}"))?;
@@ -1614,13 +1678,16 @@ fn open_daily_note(state: State<AppState>,
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        // Updates from the GitHub releases (see `plugins.updater` in tauri.conf.json).
+        .plugin(tauri_plugin_notification::init());
+    // Updates from the GitHub releases (see `plugins.updater` in tauri.conf.json).
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    builder
         .manage(AppState::default())
         .setup(|app| {
             file_history::init(app.handle());
@@ -1655,6 +1722,7 @@ pub fn run() {
             startup_vault,
             focus_vault_window,
             open_window,
+            device_vault,
             recent_vaults,
             forget_vault,
             read_note,
