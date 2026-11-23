@@ -636,6 +636,18 @@ export const focusVaultWindow = (path: string) => invoke<boolean>("focus_vault_w
 export const openWindow = (path: string | null) => invoke<void>("open_window", { path });
 /** Phones: the vault folder in the app's own storage (made on first use). */
 export const deviceVault = () => invoke<string>("device_vault");
+
+/** Phones: may the app use folders in shared storage ("All files access")? */
+export interface StorageAccess {
+  granted: boolean;
+  /** Shared storage root, e.g. /storage/emulated/0 ("" on the desktop). */
+  root: string;
+}
+export const storageAccess = () => invoke<StorageAccess>("storage_access");
+/** Opens the system page to allow it; the state once the user is back. */
+export const requestStorageAccess = () => invoke<StorageAccess>("request_storage_access");
+/** The system folder picker; the folder's path, null if cancelled. */
+export const pickVaultFolder = () => invoke<string | null>("pick_vault_folder");
 /** Remove from the recent list (the folder is not touched). */
 export const forgetVault = (path: string) => invoke<VaultEntry[]>("forget_vault", { path });
 export const readNote = (path: string) => invoke<string>("read_note", { path });

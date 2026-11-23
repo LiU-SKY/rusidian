@@ -206,7 +206,18 @@ npm run tauri android build -- --debug --apk
 ```
 
 `src-tauri/gen/android`는 `tauri android init`으로 만든 안드로이드 프로젝트입니다.
-지금 폰 앱은 앱 저장공간의 `Vault` 폴더를 vault로 씁니다("Vault 폴더 열기"가 이 폴더를 만들고 엽니다).
+
+폰의 "Vault 폴더 열기"는 두 가지를 고르게 합니다.
+
+- **내 파일의 폴더**: `Documents/MyVault` 같은 공용 폴더. Syncthing 같은 앱으로 PC vault와 맞출 수 있습니다.
+  데스크톱과 같은 파일 경로로 읽기 때문에 안드로이드의 "모든 파일 접근"(`MANAGE_EXTERNAL_STORAGE`)
+  권한이 필요합니다(Android 10 이하는 저장공간 권한). 폴더는 시스템 폴더 선택기로 고르고, 고른 폴더의
+  문서 ID(`primary:Documents/MyVault`)에서 경로를 만듭니다. Kotlin 쪽은
+  `gen/android/app/src/main/java/com/rusidian/app/StoragePlugin.kt`, Rust 쪽은 `src-tauri/src/storage.rs`입니다.
+  권한 없이 열면 이 앱이 만든 파일만 보이므로, 그때는 경고와 "권한 허용" 버튼을 띄웁니다.
+- **앱 안의 vault**: 앱 저장공간의 `Vault` 폴더. 권한이 필요 없지만 다른 앱과 맞출 수 없습니다.
+
+"모든 파일 접근" 권한을 쓰는 앱은 Play 스토어 심사가 까다로워서, 지금은 APK를 직접 설치하는 것을 전제로 합니다.
 휴지통은 vault의 `.trash` 폴더이고, 새 창·탐색기에서 보기·Everything·자동 업데이트는 데스크톱에만 있습니다.
 
 ## 로드맵

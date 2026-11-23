@@ -27,6 +27,7 @@ struct OpenVault {
 
 mod file_history;
 mod phone_inbox;
+mod storage;
 mod subscriptions;
 use rusidian_core::calendars::{self, CalendarSource};
 use rusidian_core::recent as vaults;
@@ -271,6 +272,24 @@ fn device_vault(app: AppHandle) -> Result<String, String> {
             .map_err(|e| e.to_string())?;
     }
     Ok(dir.to_string_lossy().into_owned())
+}
+
+/// Phones: may the app use vaults in shared storage? (Always on the desktop.)
+#[tauri::command]
+async fn storage_access(app: AppHandle) -> Result<storage::Access, String> {
+    storage::access(&app).await
+}
+
+/// Phones: ask for "All files access"; the state after the user answers.
+#[tauri::command]
+async fn request_storage_access(app: AppHandle) -> Result<storage::Access, String> {
+    storage::request_access(&app).await
+}
+
+/// Phones: choose a vault folder with the system picker (`None` = cancelled).
+#[tauri::command]
+async fn pick_vault_folder(app: AppHandle) -> Result<Option<String>, String> {
+    storage::pick_folder(&app).await
 }
 
 /// Vaults opened before, newest first (the last vault of older settings
@@ -1681,7 +1700,8 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init());
+        .plugin(tauri_plugin_notification::init())
+        .plugin(storage::init());
     // Updates from the GitHub releases (see `plugins.updater` in tauri.conf.json).
     #[cfg(desktop)]
     let builder = builder
@@ -1723,6 +1743,9 @@ pub fn run() {
             focus_vault_window,
             open_window,
             device_vault,
+            storage_access,
+            request_storage_access,
+            pick_vault_folder,
             recent_vaults,
             forget_vault,
             read_note,
