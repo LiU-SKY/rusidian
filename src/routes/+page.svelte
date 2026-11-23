@@ -21,6 +21,7 @@
   import TagPane from "$lib/TagPane.svelte";
   import WindowControls from "$lib/WindowControls.svelte";
   import { MOBILE, onDesktop } from "$lib/platform";
+  import PhoneVaultDialog from "$lib/PhoneVaultDialog.svelte";
   import { DocStore, type Doc } from "$lib/docs.svelte";
   import { fuzzyMatch } from "$lib/fuzzy";
   import type { IconName } from "$lib/icons";
@@ -31,7 +32,7 @@
   import { hk, hotkeys, label as hotkeyLabel, matches } from "$lib/hotkeys.svelte";
   import { Leaf, MAX_PANES, Pane, Workspace, type ViewKind } from "$lib/workspace.svelte";
   import {
-    createNote, deviceVault, displayName, filePaths, focusVaultWindow, forgetVault, isTextFile, listTemplates, movePath,
+    createNote, displayName, filePaths, requestStorageAccess, storageAccess, focusVaultWindow, forgetVault, isTextFile, listTemplates, movePath,
     newCanvas, newFolder, newNote, onVaultChanged, openDailyNote, openVault, openWindow, readNote, recentVaults, refreshTree,
     renamePath, renderTemplate, resolveLink, revealPath, startupVault, trashPath, vaultUrl, getSync, setSync,
     getBookmarks, toggleBookmark, removeBookmark, type BookmarkItem,
@@ -65,6 +66,8 @@
   let vaults = $state<VaultEntry[]>([]);
   let templateFiles = $state<string[]>([]);
   let showSettings = $state(false);
+  /** Phones: the vault folder chooser (see pickVault). */
+  let phoneVault = $state(false);
   /** Recently opened files, newest first (quick switcher order). */
   let recent = $state<string[]>([]);
   let treeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -173,6 +176,7 @@
       sideTab = "files";
       error = null;
       notice = info.watching ? null : "이 폴더는 변경 감지를 할 수 없습니다. 바깥에서 바꾼 내용은 사이드바 위쪽의 새로고침 버튼으로 반영하세요.";
+      if (MOBILE) await warnStorageAccess(info.root);
       syncStatus = null;
       await loadSyncInfo();
       if (syncInfo?.config) runSync(true);
@@ -182,6 +186,24 @@
     } finally {
       refreshVaults();
     }
+  }
+
+  /**
+   * Phones: a vault in shared storage without "All files access" shows only
+   * the files this app wrote itself, the rest silently missing. Say so.
+   */
+  async function warnStorageAccess(root: string) {
+    const access = await storageAccess().catch(() => null);
+    if (!access || access.granted || !access.root || !root.startsWith(access.root)) return;
+    notice = "모든 파일 접근 권한이 꺼져 있어 이 vault의 일부 파일이 보이지 않습니다. 다른 앱이 만든 파일도 보이려면 권한을 허용하세요.";
+    noticeAction = {
+      notice,
+      label: "권한 허용",
+      run: async () => {
+        const after = await requestStorageAccess().catch(() => null);
+        if (after?.granted) await loadVault(root);
+      },
+    };
   }
 
   // ------------------------------------------------------------- git sync
@@ -446,9 +468,8 @@
   /** Pick a folder and open it as a vault (in a new window when `newWindow`). */
   async function pickVault(newWindow = false) {
     if (MOBILE) {
-      // No folder picker with plain paths on phones yet: the app's own vault.
-      const own = await deviceVault().catch((e) => ((error = String(e)), null));
-      if (own) await loadVault(own);
+      // Storage permission and the folder picker (or the app's own vault).
+      phoneVault = true;
       return;
     }
     const picked = await open({ directory: true, multiple: false, title: "Vault 폴더 선택" });
@@ -1512,6 +1533,11 @@
   <Palette placeholder="넣을 템플릿을 고르세요" items={templateItems} onpick={pickTemplate}
     onclose={() => (palette = null)} footer={"↑↓ 이동 · Enter 커서 위치에 넣기 · {{title}} {{date}} {{time}} 채움"} empty="일치하는 템플릿 없음" />
 {/if}
+{#if phoneVault}
+  <PhoneVaultDialog onclose={() => (phoneVault = false)}
+    onpick={(path) => { phoneVault = false; void loadVault(path); }} />
+{/if}
+
 {#if showSettings}
   <SettingsDialog commands={hotkeyCommands} hasVault={!!vault} onclose={() => (showSettings = false)}
     onnotesettings={() => vaultVersion++} />
