@@ -17,6 +17,17 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.154"
 yaml-rust2 = "0.13.0"
 
+# Everything search (everything.rs): its window-message IPC.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    # WNDCLASSEXW (its background brush) lives behind the GDI feature.
+    "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [dev-dependencies]
 tempfile = "3"
 zip = { version = "9", default-features = false, features = ["deflate"] }

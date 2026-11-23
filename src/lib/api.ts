@@ -47,6 +47,38 @@ export interface Backlink {
 
 export const searchVault = (query: string) => invoke<SearchHit[]>("search_vault", { query });
 
+/** Everything (voidtools) on this PC: running, version, index loaded. */
+export interface EverythingStatus {
+  running: boolean;
+  version: string | null;
+  db_loaded: boolean;
+}
+
+export interface EverythingHit {
+  /** Full Windows path. */
+  path: string;
+  name: string;
+  folder: boolean;
+  size: number | null;
+  /** Unix milliseconds. */
+  modified: number | null;
+  /** Vault-relative path when the hit is inside the open vault. */
+  vault_path: string | null;
+}
+
+export interface EverythingFound {
+  /** All matches (hits holds the first ones). */
+  total: number;
+  hits: EverythingHit[];
+}
+
+export const everythingStatus = () => invoke<EverythingStatus>("everything_status");
+/** Search the whole PC with Everything's own syntax (`ext:pdf`, `"two words"`, …). */
+export const everythingSearch = (query: string, limit?: number) =>
+  invoke<EverythingFound>("everything_search", { query, limit });
+/** Open a hit of the last search with its default app, or show it in Explorer. */
+export const everythingOpen = (path: string, reveal = false) => invoke<void>("everything_open", { path, reveal });
+
 export interface TagCount {
   /** Without `#`; nested tags use `/`. */
   tag: string;

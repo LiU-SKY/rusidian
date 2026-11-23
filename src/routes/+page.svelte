@@ -37,6 +37,7 @@
     saveAttachment, attachmentStamp, ATTACHMENT_MAX_BYTES, phoneChanged, phoneProcess,
     syncNow, syncStamp, type MoveResult, type Property, type PropertyValue, type SyncConfig, type SyncInfo, type VaultEntry,
     type VaultInfo, type Hotkey,
+    everythingOpen, everythingSearch, everythingStatus, mediaKind, type EverythingHit,
   } from "$lib/api";
 
   const TREE_REFRESH_MS = 200;
@@ -58,7 +59,7 @@
   let vaultVersion = $state(0);
   let searchPanel: { focus: () => void; setQuery: (q: string) => void } | undefined = $state();
   /** Open modal: quick switcher (Ctrl+O), command palette (Ctrl+P), template picker, vault switcher. */
-  let palette = $state<"switcher" | "commands" | "templates" | "vaults" | null>(null);
+  let palette = $state<"switcher" | "commands" | "templates" | "vaults" | "everything" | null>(null);
   /** Vaults opened before, newest first. */
   let vaults = $state<VaultEntry[]>([]);
   let templateFiles = $state<string[]>([]);
@@ -912,6 +913,117 @@
     }
   }
 
+  // ------------------------------------- Everything: whole-PC search (Ctrl+Shift+E)
+  const EVERYTHING_DEBOUNCE_MS = 120;
+  let everythingHits = $state<EverythingHit[]>([]);
+  let everythingTotal = $state(0);
+  /** What the list says when it has no hits (help, Everything not running, errors). */
+  let everythingEmpty = $state("");
+  let everythingTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Only the newest request's answer is shown. */
+  let everythingSeq = 0;
+
+  const EVERYTHING_HELP = "PC 전체에서 파일 이름을 찾습니다 (Everything 문법: ext:pdf, \"두 단어\", C:\\work\\ 보고서)";
+
+  async function everythingIdle(seq: number) {
+    try {
+      const s = await everythingStatus();
+      if (seq !== everythingSeq) return;
+      everythingEmpty = !s.running
+        ? "Everything이 실행 중이 아닙니다. Everything(voidtools.com)을 설치·실행하면 PC 전체를 찾을 수 있습니다."
+        : !s.db_loaded
+          ? `Everything ${s.version ?? ""}이 색인을 만드는 중입니다. 잠시 뒤 다시 시도하세요.`
+          : EVERYTHING_HELP;
+    } catch (e) {
+      if (seq === everythingSeq) everythingEmpty = String(e);
+    }
+  }
+
+  function onEverythingQuery(query: string) {
+    const q = query.trim();
+    const seq = ++everythingSeq;
+    if (everythingTimer) clearTimeout(everythingTimer);
+    if (!q) {
+      everythingHits = [];
+      everythingTotal = 0;
+      everythingEmpty = EVERYTHING_HELP;
+      everythingIdle(seq);
+      return;
+    }
+    everythingTimer = setTimeout(async () => {
+      everythingTimer = null;
+      try {
+        const found = await everythingSearch(q);
+        if (seq !== everythingSeq) return;
+        everythingHits = found.hits;
+        everythingTotal = found.total;
+        everythingEmpty = "일치하는 파일 없음";
+      } catch (e) {
+        if (seq !== everythingSeq) return;
+        everythingHits = [];
+        everythingTotal = 0;
+        everythingEmpty = String(e);
+      }
+    }, EVERYTHING_DEBOUNCE_MS);
+  }
+
+  function fileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    let v = bytes / 1024;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i++;
+    }
+    return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+  }
+
+  function everythingItems(_query: string): PaletteItem[] {
+    return everythingHits.map((h): PaletteItem => {
+      const parent = h.path.length > h.name.length ? h.path.slice(0, h.path.length - h.name.length).replace(/\\$/, "") : "";
+      const facts = [
+        h.vault_path !== null ? "vault" : null,
+        !h.folder && h.size !== null ? fileSize(h.size) : null,
+        h.modified !== null ? new Date(h.modified).toLocaleDateString("ko-KR") : null,
+      ].filter(Boolean);
+      return {
+        id: h.path,
+        label: h.name,
+        detail: parent || undefined,
+        icon: h.folder ? "folder-open" : h.vault_path !== null ? "note-pen" : "file",
+        hint: facts.join(" · ") || undefined,
+      };
+    });
+  }
+
+  const everythingFooter = $derived(
+    `${everythingTotal > everythingHits.length ? `${everythingTotal.toLocaleString()}개 중 ${everythingHits.length}개 · ` : ""}`
+      + "↑↓ 이동 · Enter 열기 · Ctrl+Enter 새 탭 · Shift+Enter 탐색기에서 보기 · Esc 닫기",
+  );
+
+  /** Vault files open here (notes, canvases, images, PDFs …); everything else with its own app. */
+  async function pickEverything(item: PaletteItem, _query: string, keys: { shift: boolean; mod: boolean }) {
+    const hit = everythingHits.find((h) => h.path === item.id);
+    if (!hit) return;
+    try {
+      if (keys.shift) {
+        await everythingOpen(hit.path, true);
+      } else if (hit.vault_path !== null && hit.folder) {
+        // Open the folder itself too, not just the ones above it.
+        sideTab = "files";
+        treeUi.reveal(hit.vault_path);
+        treeUi.expanded[hit.vault_path] = true;
+      } else if (hit.vault_path !== null && (isTextFile(hit.vault_path) || mediaKind(hit.vault_path))) {
+        await openPath(hit.vault_path, keys.mod);
+      } else {
+        await everythingOpen(hit.path);
+      }
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   // ------------------------------------------------ command palette (Ctrl+P)
   interface Command {
     id: string;
@@ -939,6 +1051,8 @@
       run: () => (palette = "commands") },
     { id: "switcher", obsidian: "switcher:open", keys: [hk("Mod+O")], label: "빠른 전환: 파일 열기", icon: "search", when: hasVault,
       run: () => (palette = "switcher") },
+    { id: "everything", keys: [hk("Mod+Shift+E")], label: "Everything: PC 전체에서 파일 찾기", icon: "search",
+      run: () => (palette = "everything") },
     { id: "new-note", obsidian: "file-explorer:new-file", keys: [hk("Mod+N")], label: "새 노트", icon: "file-plus", when: hasVault, run: () => newNoteIn("") },
     { id: "new-canvas", obsidian: "canvas:new-file", label: "새 캔버스", icon: "columns", when: hasVault, run: () => newCanvasIn("") },
     { id: "new-folder", obsidian: "file-explorer:new-folder", label: "새 폴더", icon: "folder-plus", when: hasVault, run: () => newFolderIn("") },
@@ -1377,6 +1491,9 @@
 {#if palette === "switcher"}
   <Palette placeholder="파일 이름을 입력하세요" items={switcherItems} onpick={pickFile}
     onclose={() => (palette = null)} footer="↑↓ 이동 · Enter 열기 · Ctrl+Enter 새 탭 · Shift+Enter 새 노트 · Esc 닫기" />
+{:else if palette === "everything"}
+  <Palette placeholder="PC 전체에서 찾을 파일 이름 (Everything)" items={everythingItems} onquery={onEverythingQuery}
+    onpick={pickEverything} onclose={() => (palette = null)} footer={everythingFooter} empty={everythingEmpty} />
 {:else if palette === "commands"}
   <Palette placeholder="명령을 입력하세요" items={commandItems} onpick={runCommand}
     onclose={() => (palette = null)} footer="↑↓ 이동 · Enter 실행 · Esc 닫기" empty="일치하는 명령 없음" />

@@ -5,7 +5,7 @@ use rusidian_core::calendar::{self, Calendar};
 use rusidian_core::finance::{self, EntryKind, FinanceData};
 use rusidian_core::graph::{self, Graph};
 use rusidian_core::sync::{self, SyncConfig};
-use rusidian_core::{daily, fileops, finance_import, frontmatter, gitsync, note_settings, tasks, templates, vault};
+use rusidian_core::{daily, everything, fileops, finance_import, frontmatter, gitsync, note_settings, tasks, templates, vault};
 use std::fs;
 use std::path::PathBuf;
 use std::collections::HashMap;
@@ -48,6 +48,9 @@ struct AppState {
     ics: Arc<IcsCache>,
     /// Vaults being synced right now (one sync at a time per vault).
     syncing: Mutex<std::collections::HashSet<PathBuf>>,
+    /// Paths of each window's last Everything search: `everything_open` opens
+    /// only these, so a page can't run an arbitrary program through it.
+    everything_hits: Mutex<HashMap<String, std::collections::HashSet<String>>>,
 }
 
 #[derive(serde::Serialize)]
@@ -719,6 +722,70 @@ async fn search_vault(state: State<'_, AppState>,
     window: tauri::WebviewWindow, query: String) -> Result<Vec<SearchHit>, String> {
     let (_, index) = current(&state, window.label())?;
     Ok(read_index(&index).search(&query, SEARCH_LIMIT))
+}
+
+// ------------------------------------------------------- Everything search
+
+/// Results asked of Everything at most (it counts all matches anyway).
+const EVERYTHING_MAX: u32 = 200;
+
+#[derive(serde::Serialize)]
+struct EverythingHit {
+    #[serde(flatten)]
+    hit: everything::Hit,
+    /// Vault-relative path when the hit is in this window's vault (and not hidden).
+    vault_path: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct EverythingFound {
+    total: u32,
+    hits: Vec<EverythingHit>,
+}
+
+/// Is Everything running, which version, and has it loaded its index?
+#[tauri::command]
+async fn everything_status() -> Result<everything::Status, String> {
+    tauri::async_runtime::spawn_blocking(everything::status).await.map_err(|e| e.to_string())
+}
+
+/// Search the whole PC with Everything (its own query syntax). Works with or
+/// without a vault open; hits inside the vault carry their vault path.
+#[tauri::command]
+async fn everything_search(state: State<'_, AppState>, window: tauri::WebviewWindow,
+    query: String, limit: Option<u32>) -> Result<EverythingFound, String> {
+    let root = current(&state, window.label()).ok().map(|(root, _)| root);
+    let max = limit.unwrap_or(EVERYTHING_MAX).clamp(1, EVERYTHING_MAX);
+    let found = tauri::async_runtime::spawn_blocking(move || everything::search(&query, max))
+        .await
+        .map_err(|e| e.to_string())??;
+    let hits: Vec<EverythingHit> = found.hits.into_iter().map(|hit| {
+        let vault_path = root.as_deref()
+            .and_then(|r| everything::vault_relative(r, &hit.path))
+            .filter(|p| !vault::is_hidden_path(p));
+        EverythingHit { hit, vault_path }
+    }).collect();
+    let paths = hits.iter().map(|h| h.hit.path.clone()).collect();
+    state.everything_hits.lock().map_err(|_| "state poisoned".to_string())?
+        .insert(window.label().to_string(), paths);
+    Ok(EverythingFound { total: found.total, hits })
+}
+
+/// Open a hit of the last Everything search with its default app, or show it
+/// in Explorer (`reveal`).
+#[tauri::command]
+fn everything_open(state: State<AppState>, window: tauri::WebviewWindow,
+    path: String, reveal: bool) -> Result<(), String> {
+    let known = state.everything_hits.lock().map_err(|_| "state poisoned".to_string())?
+        .get(window.label()).is_some_and(|paths| paths.contains(&path));
+    if !known {
+        return Err("Everything 검색 결과에 있는 파일만 열 수 있습니다.".to_string());
+    }
+    if reveal {
+        tauri_plugin_opener::reveal_item_in_dir(&path).map_err(|e| e.to_string())
+    } else {
+        tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| format!("열지 못했습니다 ({path}): {e}"))
+    }
 }
 
 /// Every tag in the vault with how many notes carry it.
@@ -1595,6 +1662,9 @@ pub fn run() {
             list_templates,
             render_template,
             search_vault,
+            everything_status,
+            everything_search,
+            everything_open,
             list_tags,
             backlinks,
             resolve_link,

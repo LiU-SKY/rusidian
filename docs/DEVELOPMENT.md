@@ -90,13 +90,14 @@ core/        rusidian-core: UI와 무관한 순수 Rust 로직 (Tauri 의존성 
   src/fixed.rs        고정지출 목록, 그 달 결제 찾기, 매달 나간 결제로 후보 추천(숨긴 후보 제외), 결제일 알림
   src/graph.rs        링크 그래프 (노트/첨부/미해결 노드, 중복 제거된 간선, 연결 수)
   src/date.rs         최소 날짜 계산 (외부 라이브러리 없음)
+  src/everything.rs   Everything(voidtools) PC 전체 검색: SDK 없이 IPC(WM_COPYDATA, QUERY2) 직접 구현, 응답 파싱, vault 상대 경로
   src/tags.rs         태그 추출 (#본문 태그 + tags 속성, 하위 태그 /)
   src/fileops.rs      이름 검사, 이름 바꾸기/옮기기 + 링크 다시 쓰기
   src/history.rs      파일 복구: 노트 이전 버전 보관(간격·보관 기간·개수 제한, 옮김 따라가기), 줄 단위 비교
   src/markdown.rs     코드 블록 건너뛰기 등 공용 도우미
 src-tauri/   Tauri 셸
   src/lib.rs    Tauri 명령 (open_vault, refresh_tree, read_note, write_note, file_times, create_note,
-                last_vault, parse_frontmatter, search_vault, backlinks, resolve_link,
+                last_vault, parse_frontmatter, search_vault, everything_status, everything_search, everything_open, backlinks, resolve_link,
                 list_tasks, toggle_task, add_task, calendar_range, open_daily_note,
                 finance_range, add_finance, link_graph, list_tags,
                 new_note, new_canvas, new_folder, rename_path, move_path, trash_path, reveal_path,
