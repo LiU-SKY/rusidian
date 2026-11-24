@@ -587,10 +587,16 @@
     flex-direction: column;
     padding: 20px max(16px, calc((100% - 980px) / 2)) 0;
   }
+  /* On a narrow screen (a phone) the controls wrap under the title rather
+     than squeezing it and their labels to a letter per line. */
   .head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    gap: 8px 12px;
+  }
+  .head :is(h1, button) {
+    white-space: nowrap;
   }
   h1 {
     flex: 1;

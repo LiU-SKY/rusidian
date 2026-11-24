@@ -834,9 +834,14 @@
     margin: 0;
     font-size: 22px;
   }
+  /* Narrow screens (phones): the buttons wrap, each label stays on a line. */
   .nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
+  }
+  .head button {
+    white-space: nowrap;
   }
   .nav button {
     display: inline-flex;
