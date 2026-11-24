@@ -50,12 +50,15 @@
   const WORKSPACE_KEY = "rusidian.workspace:";
   /** Recently opened files, per vault. */
   const RECENT_KEY = "rusidian.recent:";
+  /** Narrower than this (CSS px) on a phone or tablet: the phone layout. */
+  const PHONE_MAX_WIDTH = 760;
 
   let vault = $state<VaultInfo | null>(null);
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
   let sideTab = $state<"files" | "search" | "bookmarks">("files");
-  let showRight = $state(true);
+  // On a phone the right panel covers the note, so it starts closed.
+  let showRight = $state(!MOBILE);
   let rightTab = $state<"backlinks" | "outgoing" | "outline" | "tags">("backlinks");
   /** Bumped on every on-disk change so search/backlinks/views refresh. */
   let vaultVersion = $state(0);
@@ -68,6 +71,12 @@
   let showSettings = $state(false);
   /** Phones: the vault folder chooser (see pickVault). */
   let phoneVault = $state(false);
+  /** A phone-sized screen: one pane, with the sidebar and the right panel
+   *  sliding over it instead of beside it. Tablets keep the desktop layout. */
+  let innerWidth = $state(typeof window === "undefined" ? 1200 : window.innerWidth);
+  const phone = $derived(MOBILE && innerWidth < PHONE_MAX_WIDTH);
+  /** Phones: the sidebar is slid open. */
+  let drawer = $state(false);
   /** Recently opened files, newest first (quick switcher order). */
   let recent = $state<string[]>([]);
   let treeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -108,6 +117,28 @@
   const currentPath = $derived(leaf.kind === "file" ? leaf.path : null);
   const activeDoc = $derived(docFor(leaf));
   const isNote = $derived(currentPath?.toLowerCase().endsWith(".md") ?? false);
+
+  // Phones: opening something (a file, a view, a link) closes the panels
+  // over it, so it can be seen.
+  $effect(() => {
+    void [leaf.id, leaf.kind, leaf.path];
+    untrack(() => {
+      drawer = false;
+      if (phone) showRight = false;
+    });
+  });
+  // Phones: the tab bar scrolls sideways; keep the active tab in sight.
+  $effect(() => {
+    if (!phone) return;
+    void leaf.id;
+    tick().then(() =>
+      document.querySelector(".tabbar .tab.active")?.scrollIntoView({ inline: "nearest", block: "nearest" }),
+    );
+  });
+  // Phones show one pane: a split saved on a wide screen is folded back.
+  $effect(() => {
+    if (phone && workspace.panes.length > 1) untrack(() => workspace.unsplit());
+  });
 
   // Load a doc for every tab showing a text file; drop docs no tab shows.
   $effect(() => {
@@ -325,6 +356,7 @@
   });
   async function searchFor(query: string) {
     sideTab = "search";
+    drawer = true;
     await tick();
     searchPanel?.setQuery(query);
   }
@@ -712,7 +744,8 @@
       sideTab = "files";
       treeUi.reveal(path);
       await openPath(path);
-      treeUi.renaming = path;
+      // Phones: the tree is in the closed drawer; the note's title renames.
+      if (!phone) treeUi.renaming = path;
     } catch (e) {
       error = String(e);
     }
@@ -726,7 +759,8 @@
       sideTab = "files";
       treeUi.reveal(path);
       await openPath(path);
-      treeUi.renaming = path;
+      // Phones: the tree is in the closed drawer; the note's title renames.
+      if (!phone) treeUi.renaming = path;
     } catch (e) {
       error = String(e);
     }
@@ -803,6 +837,7 @@
 
   async function showSearch() {
     sideTab = "search";
+    drawer = true;
     await tick();
     searchPanel?.focus();
   }
@@ -810,6 +845,7 @@
   /** Search the vault for a tag (clicked in the tag pane or a note). */
   async function searchTag(tag: string) {
     sideTab = "search";
+    drawer = true;
     await tick();
     searchPanel?.setQuery(`tag:#${tag}`);
   }
@@ -920,7 +956,7 @@
     const wanted = q.replace(/\.md$/i, "").toLowerCase();
     const exact = allFiles.some((p) => p.replace(/\.md$/i, "").toLowerCase() === wanted
       || displayName(baseName(p)).toLowerCase() === wanted);
-    if (!exact) items.push({ id: CREATE_ID, label: `"${q}" 노트 만들기`, icon: "file-plus", hint: "Shift+Enter" });
+    if (!exact) items.push({ id: CREATE_ID, label: `"${q}" 노트 만들기`, icon: "file-plus", hint: MOBILE ? undefined : "Shift+Enter" });
     return items;
   }
 
@@ -1092,7 +1128,7 @@
       run: () => closeTab(workspace.pane, workspace.pane.active) },
     { id: "next-tab", obsidian: "workspace:next-tab", keys: [hk("Mod+Tab"), hk("Mod+PageDown")], label: "다음 탭", icon: "chevron-right", when: hasVault, run: () => cycleTab(1) },
     { id: "prev-tab", obsidian: "workspace:previous-tab", keys: [hk("Mod+Shift+Tab"), hk("Mod+PageUp")], label: "이전 탭", icon: "chevron-left", when: hasVault, run: () => cycleTab(-1) },
-    { id: "split", obsidian: "workspace:split-vertical", keys: [hk("Mod+\\")], label: "오른쪽으로 분할", icon: "columns", when: () => !!vault && workspace.panes.length < MAX_PANES,
+    { id: "split", obsidian: "workspace:split-vertical", keys: [hk("Mod+\\")], label: "오른쪽으로 분할", icon: "columns", when: () => !!vault && !phone && workspace.panes.length < MAX_PANES,
       run: splitRight },
     { id: "unsplit", label: "분할 닫기 (탭은 한 창으로 모음)", icon: "columns", when: () => workspace.panes.length > 1,
       run: () => workspace.unsplit() },
@@ -1162,7 +1198,7 @@
     const available = COMMANDS.filter((c) => !c.when || c.when());
     const toItem = (c: Command, marks?: number[]): PaletteItem => {
       const keys = keysOf(c);
-      return { id: c.id, label: c.label, icon: c.icon, hint: keys.length ? hotkeyLabel(keys[0]) : undefined, marks };
+      return { id: c.id, label: c.label, icon: c.icon, hint: keys.length && !MOBILE ? hotkeyLabel(keys[0]) : undefined, marks };
     };
     if (!query.trim()) return available.map((c) => toItem(c));
     return available
@@ -1202,6 +1238,36 @@
   async function toggleReading(target = workspace.leaf) {
     await docFor(target)?.save();
     target.reading = !target.reading;
+  }
+
+  /** Android's back button: close what is open on top (a menu or dialog,
+   *  then the drawer or right panel); with nothing open, leave the app. */
+  async function onBack() {
+    const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]');
+    const top = document.querySelector<HTMLElement>('[role="menu"]') ?? dialogs[dialogs.length - 1];
+    if (top) {
+      // Every menu and dialog closes on Escape; send it where its handler
+      // listens (the focused field inside it, else the dialog itself).
+      const focused = document.activeElement;
+      const target = focused && top.contains(focused) ? focused : (top.querySelector("input") ?? top);
+      target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      return;
+    }
+    if (drawer) {
+      drawer = false;
+      return;
+    }
+    if (phone && showRight) {
+      showRight = false;
+      return;
+    }
+    try {
+      await Promise.race([docs.flushAll(), sleep(3000)]);
+    } catch {
+      // Leaving anyway, as a window close does.
+    }
+    const { exit } = await import("@tauri-apps/api/app");
+    await exit(0);
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -1247,6 +1313,17 @@
       )
       .then((u) => (destroyed ? u() : (unlistenClose = u)))
       .catch(() => {});
+    let unlistenBack: (() => void) | undefined;
+    if (MOBILE) {
+      import("@tauri-apps/api/app")
+        .then(({ onBackButtonPress }) => onBackButtonPress(() => void onBack()))
+        .then((l) => {
+          const off = () => void l.unregister();
+          if (destroyed) off();
+          else unlistenBack = off;
+        })
+        .catch(() => {});
+    }
     // A reload (not a close) still tries.
     const onBeforeUnload = () => {
       docs.flushAll();
@@ -1284,6 +1361,7 @@
       unlistenUpdate?.();
       unlisten?.();
       unlistenClose?.();
+      unlistenBack?.();
       stopReminders();
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
@@ -1322,12 +1400,17 @@
   const viewActive = (kind: ViewKind) => leaf.kind === kind;
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} bind:innerWidth />
 
 <!-- No native title bar: the top row of each pane is the drag area and the
-     window buttons sit at the right end of the rightmost top row. -->
-<div class="app" class:with-right={rightPanel}>
+     window buttons sit at the right end of the rightmost top row. On a phone
+     the sidebar and the right panel are drawers over the one pane. -->
+<div class="app" class:with-right={rightPanel && !phone} class:mobile={MOBILE} class:phone
+  class:drawer-open={phone && drawer} class:right-open={phone && rightPanel && !!currentPath}>
   {#if !MOBILE}<WindowControls />{/if}
+  {#if phone && (drawer || (rightPanel && currentPath))}
+    <div class="scrim" role="presentation" onclick={() => { drawer = false; showRight = false; }}></div>
+  {/if}
   <aside class="sidebar">
     <header class="sidebar-head top-row" data-drag>
       <button class="vault-name" onclick={() => (palette = "vaults")}
@@ -1411,6 +1494,10 @@
       <section class="pane" class:focused={pi === workspace.activePane && workspace.panes.length > 1}
         onpointerdowncapture={() => (workspace.activePane = pi)} aria-label="창 {pi + 1}">
         <header class="pane-head top-row" data-drag>
+          {#if phone}
+            <button class="icon menu-btn" onclick={() => (drawer = true)} title="사이드바" aria-label="사이드바 열기"
+              aria-expanded={drawer}><Icon name="menu" size={20} /></button>
+          {/if}
           {#if vault}
             <div class="tabbar" role="tablist" aria-label="탭">
               {#each pane.tabs as t, ti (t.id)}
@@ -1440,10 +1527,15 @@
                   title={shown.reading ? "편집하기 (Ctrl+E)" : "읽기 보기 (Ctrl+E)"} aria-label="읽기 보기">
                   <Icon name={shown.reading ? "pencil" : "book-open"} size={17} />
                 </button>
-                <button class="icon" onclick={() => { workspace.focus(pane); showView("graph", { local: true }); }}
-                  title="이 노트 주변 그래프" aria-label="이 노트 주변 그래프"><Icon name="graph" size={17} /></button>
+                {#if !phone}
+                  <!-- phones: in the command palette, to leave room for the tabs -->
+                  <button class="icon" onclick={() => { workspace.focus(pane); showView("graph", { local: true }); }}
+                    title="이 노트 주변 그래프" aria-label="이 노트 주변 그래프"><Icon name="graph" size={17} /></button>
+                {/if}
               {/if}
-              {#if workspace.panes.length < MAX_PANES}
+              {#if phone}
+                <!-- one pane on a phone: no split -->
+              {:else if workspace.panes.length < MAX_PANES}
                 <button class="icon" onclick={() => { workspace.focus(pane); splitRight(); }}
                   title="오른쪽으로 분할 (Ctrl+\)" aria-label="오른쪽으로 분할"><Icon name="columns" size={17} /></button>
               {:else}
@@ -2085,5 +2177,107 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+  }
+  /* ----------------------------------------------------------------- phones */
+  /* No window buttons to make room for, and fingers instead of a mouse:
+     bigger targets, and close buttons that don't wait for a hover. */
+  .app.mobile {
+    --controls: 0px;
+  }
+  .app.mobile .icon {
+    padding: 8px;
+  }
+  /* A tap leaves :hover on the button until the next tap elsewhere. */
+  .app.mobile .icon:hover:not(.on) {
+    background: none;
+  }
+  .app.mobile .tab-x {
+    opacity: 1;
+  }
+  .app.phone {
+    --top-h: 48px;
+    --drawer-w: min(320px, 86vw);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* The sidebar and the right panel slide over the pane. */
+  .app.phone .sidebar,
+  .app.phone .rightbar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 40;
+    width: var(--drawer-w);
+    box-shadow: 0 0 24px rgb(0 0 0 / 0.25);
+  }
+  .app.phone .sidebar {
+    left: 0;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 0.22s ease-out,
+      visibility 0s 0.22s;
+  }
+  .app.phone.drawer-open .sidebar {
+    transform: none;
+    visibility: visible;
+    transition: transform 0.22s ease-out;
+  }
+  .app.phone .rightbar {
+    display: flex;
+    right: 0;
+    animation: slide-in-right 0.22s ease-out;
+  }
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app.phone .sidebar,
+    .app.phone.drawer-open .sidebar {
+      transition: none;
+    }
+    .app.phone .rightbar {
+      animation: none;
+    }
+  }
+  .scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 35;
+    background: rgb(0 0 0 / 0.35);
+  }
+  .app.phone .views button,
+  .app.phone .tabs button {
+    font-size: 15px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .app.phone .vault-name {
+    font-size: 16px;
+  }
+  .app.phone .side-body :global(.row) {
+    font-size: 15px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .app.phone .pane-head {
+    padding: 0 4px;
+  }
+  /* Tabs keep a readable width and scroll sideways instead of shrinking. */
+  .app.phone .tabbar {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .app.phone .tab {
+    flex: 0 0 auto;
+    max-width: 150px;
+    font-size: 14px;
+  }
+  .app.phone .toasts {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    max-width: none;
   }
 </style>

@@ -1,6 +1,8 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.rusidian" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <!-- Behind the status and navigation bars: the app's sidebar colour
+             (bg-side in +page.svelte), so the bars blend into the top and bottom rows. -->
+        <item name="android:windowBackground">#262626</item>
     </style>
 </resources>

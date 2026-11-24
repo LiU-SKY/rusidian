@@ -21,6 +21,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import Icon from "./Icon.svelte";
+  import { MOBILE } from "./platform";
 
   interface Props {
     placeholder: string;
@@ -140,7 +141,8 @@
         <li class="none">{empty}</li>
       {/each}
     </ul>
-    {#if footer}<div class="footer">{footer}</div>{/if}
+    <!-- key hints: nothing to press on a phone -->
+    {#if footer && !MOBILE}<div class="footer">{footer}</div>{/if}
   </div>
 </div>
 

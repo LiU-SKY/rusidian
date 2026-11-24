@@ -35,6 +35,7 @@
   import FinanceView from "./FinanceView.svelte";
   import GraphView from "./GraphView.svelte";
   import NoteHeader from "./NoteHeader.svelte";
+  import { MOBILE } from "./platform";
   import Properties from "./Properties.svelte";
   import Reading from "./Reading.svelte";
   import { settings } from "./settings.svelte";
@@ -195,7 +196,7 @@
         onlink={actions.followLink} ontag={actions.searchTag} ontoggle={toggleTaskLine} />
     {:else}
       {#key doc}
-        <Editor bind:this={editor} doc={doc.content} onchange={(text) => doc?.edit(text)} autofocus={active}
+        <Editor bind:this={editor} doc={doc.content} onchange={(text) => doc?.edit(text)} autofocus={active && !MOBILE}
           onlink={(target, heading) => doc && actions.followLink(target, heading, doc.path)}
           livePreview={doc.isNote && settings.livePreview}
           imageUrl={(target) => actions.imageUrl(doc?.path ?? "", target)}

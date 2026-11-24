@@ -7,6 +7,9 @@
   import { slider } from "./slider";
   import { FONT_MAX, FONT_MIN, settings, type Theme } from "./settings.svelte";
   import { updates } from "./updates.svelte";
+  import { MOBILE } from "./platform";
+
+  const SYSTEM = MOBILE ? "휴대폰" : "Windows";
 
   interface Props {
     /** Commands for the hotkeys tab. */
@@ -55,7 +58,9 @@
       <div class="segmented tabs" role="tablist" aria-label="설정 항목" use:slider={{ selector: ".on", color: "var(--bg)", shadow: "0 1px 2px rgb(0 0 0 / 0.15)" }}>
         <button role="tab" aria-selected={tab === "general"} class:on={tab === "general"} onclick={() => (tab = "general")}>일반</button>
         <button role="tab" aria-selected={tab === "notes"} class:on={tab === "notes"} onclick={() => (tab = "notes")}>템플릿·데일리 노트</button>
-        <button role="tab" aria-selected={tab === "hotkeys"} class:on={tab === "hotkeys"} onclick={() => (tab = "hotkeys")}>단축키</button>
+        {#if !MOBILE}
+          <button role="tab" aria-selected={tab === "hotkeys"} class:on={tab === "hotkeys"} onclick={() => (tab = "hotkeys")}>단축키</button>
+        {/if}
       </div>
       <button class="close" onclick={onclose} aria-label="닫기"><Icon name="close" size={16} /></button>
     </header>
@@ -69,7 +74,7 @@
       <div class="row">
         <div class="what">
           <span class="name">테마</span>
-          <span class="desc">시스템을 고르면 Windows 설정을 따릅니다.</span>
+          <span class="desc">시스템을 고르면 {SYSTEM} 설정을 따릅니다.</span>
         </div>
         <div class="segmented" role="radiogroup" aria-label="테마" use:slider={{ selector: ".on", color: "var(--bg)", shadow: "0 1px 2px rgb(0 0 0 / 0.15)" }}>
           {#each THEMES as t (t.value)}
@@ -98,7 +103,7 @@
       <div class="row">
         <div class="what">
           <label class="name" for="notifications">알림</label>
-          <span class="desc">앱이 열려 있을 때 <code>⏰ 날짜 시간</code> 알림, 시간이 적힌 할일의 시작, 고정지출 결제일(재무 → 고정지출에서 켬)을 Windows 알림으로 알려줍니다.</span>
+          <span class="desc">앱이 열려 있을 때 <code>⏰ 날짜 시간</code> 알림, 시간이 적힌 할일의 시작, 고정지출 결제일(재무 → 고정지출에서 켬)을 {SYSTEM} 알림으로 알려줍니다.</span>
         </div>
         <input id="notifications" class="switch" type="checkbox" role="switch" bind:checked={settings.notifications} />
       </div>
@@ -119,6 +124,8 @@
         <input id="readable" class="switch" type="checkbox" role="switch" bind:checked={settings.readableWidth} />
       </div>
 
+      <!-- phones update through the APK / app store -->
+      {#if !MOBILE}
       <div class="row">
         <div class="what">
           <span class="name">업데이트</span>
@@ -145,6 +152,7 @@
             disabled={updates.status === "checking" || updates.status === "installing"}>업데이트 확인</button>
         {/if}
       </div>
+      {/if}
     </section>
     {/if}
   </div>
